@@ -1,0 +1,7 @@
+transformers 
+accelerate 
+peft 
+datasets 
+trl 
+torch
+openai
