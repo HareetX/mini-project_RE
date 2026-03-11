@@ -40,7 +40,7 @@ train_data = read_dataset("data/train.json")
 
 # 将数据转换为单轮对话的 Prompt 格式
 def format_prompts(example):
-    return format_example_wo_schema(example)
+    return {"messages": format_example_wo_schema(example)}
 
 dataset = Dataset.from_list(train_data)
 dataset = dataset.map(format_prompts)
@@ -65,8 +65,6 @@ training_args = TrainingArguments(
 trainer = SFTTrainer(
     model=model,
     train_dataset=dataset,
-    max_seq_length=512,
-    tokenizer=tokenizer,
     args=training_args,
 )
 
