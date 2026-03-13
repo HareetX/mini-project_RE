@@ -9,3 +9,8 @@ pip install -r requirements.txt
 ```bash
 python train_oft.py
 ```
+
+# Show the training curves
+```bash
+tensorboard --logdir qwen-oft-relation-extraction/runs
+```

@@ -1,13 +1,20 @@
+import os
 import torch
 from datasets import Dataset
 from transformers import AutoTokenizer, AutoModelForCausalLM, TrainingArguments
 from peft import BOFTConfig, get_peft_model
 from trl import SFTTrainer
+from huggingface_hub import snapshot_download
 
 from src.duie_dataset import read_dataset, format_example_wo_schema, format_example_w_schema
 
+# 下载模型（如果尚未下载）
+model_id = "Qwen/Qwen2.5-1.5B-Instruct"
+local_dir = os.path.join("models", os.path.basename(model_id).lower())
+snapshot_download(model_id, local_dir=local_dir)
+model_id = local_dir
+
 # 加载模型与分词器
-model_id = "Qwen/Qwen2.5-1.5B-Instruct" 
 tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
 tokenizer.pad_token = tokenizer.eos_token
 
@@ -23,7 +30,7 @@ boft_config = BOFTConfig(
     boft_block_size=4,               # 块大小，通常设置为 4 或 8
     boft_n_butterfly_factor=2,       # 蝴蝶因子层数，数值越大参数量越多，表达能力越强
     target_modules=[                 # 推荐覆盖 Qwen2.5 的所有线性层以获得最佳效果
-        "q_proj", "k_proj", "v_proj", "o_proj", 
+        "q_proj", "k_proj", "v_proj", "o_proj",
         "gate_proj", "up_proj", "down_proj"
     ],
     boft_dropout=0.1,                # 防止过拟合的 Dropout

@@ -1,8 +1,15 @@
-transformers 
-accelerate 
-peft 
-datasets 
-trl 
-torch
+--extra-index-url https://download.pytorch.org/whl/nightly/cu128
+transformers
+accelerate
+peft
+datasets
+trl
+# Nightly build targeting CUDA 12.8+; required for RTX 5090 (sm_120)
+torch==2.11.0.dev20260111+cu128
+torchvision==0.25.0.dev20260113+cu128
+torchaudio==2.11.0.dev20260111+cu128
+numpy
 openai
 ninja
+tensorboard
+bitsandbytes
