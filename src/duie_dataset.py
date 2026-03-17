@@ -24,11 +24,11 @@ class SchemaDatabase:
         self.client = OpenAIClient()
 
         self.embeddings = self._build_embeddings()
-    
+
     def _build_embeddings(self):
         texts = [str(entry) for entry in self.data]
         return self.client.embedding_batch(texts)
-    
+
     def query(self, text, top_k):
         query_embedding = self.client.embedding(text)
         # 计算与数据库中每个条目的余弦相似度
@@ -36,7 +36,7 @@ class SchemaDatabase:
         # 获取相似度最高的 top_k 条目
         top_indices = sorted(range(len(similarities)), key=lambda i: similarities[i], reverse=True)[:top_k]
         return [self.data[i] for i in top_indices]
-    
+
     def query_batch(self, texts, top_k):
         query_embeddings = self.client.embedding_batch(texts)
         results = []
@@ -49,12 +49,14 @@ class SchemaDatabase:
 
 def format_example_wo_schema(example):
     system_prompt = (
-        "你是一个关系抽取助手，帮助用户从文本中提取实体关系三元组。\n请按照以下格式返回结果：[{{'subject': '实体1', 'predicate': '关系', 'object': '实体2'}}]" + 
+        "你是一个关系抽取助手，帮助用户从文本中提取实体关系三元组。\n请按照以下格式返回结果：{{\"extracted_triplets\": [{{\"subject\": \"实体1\", \"predicate\": \"关系\", \"object\": \"实体2\"}}]}}" +
         "\n请从以下文本中提取实体关系三元组：")
-    answer = [
-        {"subject": spo['subject'], "predicate": spo['predicate'], "object": spo['object']['@value']}
-        for spo in example["spo_list"]
-    ]
+    answer = {
+        "extracted_triplets": [
+            {"subject": spo['subject'], "predicate": spo['predicate'], "object": spo['object']['@value']}
+            for spo in example["spo_list"]
+        ]
+    }
     return [{
         "role": "system",
         "content": system_prompt
@@ -69,14 +71,16 @@ def format_example_wo_schema(example):
 
 def format_example_w_schema(example, schema_candidates):
     system_prompt = (
-        "你是一个关系抽取助手，帮助用户从文本中提取实体关系三元组。\n请按照以下格式返回结果：[{{'subject': '实体1', 'predicate': '关系', 'object': '实体2'}}]" + 
+        "你是一个关系抽取助手，帮助用户从文本中提取实体关系三元组。\n请按照以下格式返回结果：{{\"extracted_triplets\": [{{\"subject\": \"实体1\", \"predicate\": \"关系\", \"object\": \"实体2\"}}]}}" +
         "\n以下是一些候选关系类型供参考：\n" + "\n".join([f"- {str(schema)}" for schema in schema_candidates]) +
         "\n请从以下文本中提取实体关系三元组："
     )
-    answer = [
-        {"subject": spo['subject'], "predicate": spo['predicate'], "object": spo['object']['@value']}
-        for spo in example["spo_list"]
-    ]
+    answer = {
+        "extracted_triplets": [
+            {"subject": spo['subject'], "predicate": spo['predicate'], "object": spo['object']['@value']}
+            for spo in example["spo_list"]
+        ]
+    }
     return [{
         "role": "system",
         "content": system_prompt
@@ -112,7 +116,7 @@ if __name__ == "__main__":
         top_k = 20 # max_predicates * 2  # Retrieve more candidates to increase recall
         results = db.query_batch(query_list, top_k=top_k)
         print(f"Having {len(results)} results from batch query...")
-        
+
         for example, retrieved in zip(dataset, results):
             # Calculate recall based on the true triples and retrieved triples
             golden_predicate = set([spo['predicate'] for spo in example['spo_list']])
@@ -123,7 +127,7 @@ if __name__ == "__main__":
             counter += 1
 
         print(f"\nAverage Recall: {recall_sum / counter:.2f}")
-    
+
     # Test the formatting functions
     if 1: # Set to 1 to run the test
         example = dataset[0]

@@ -1,3 +1,7 @@
 models/
 qwen-oft-final/
 qwen-oft-relation-extraction/
+
+backup/
+
+__pycache__/

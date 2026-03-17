@@ -4,9 +4,12 @@ from datasets import Dataset
 from transformers import AutoTokenizer, AutoModelForCausalLM, TrainingArguments
 from peft import BOFTConfig, get_peft_model
 from trl import SFTTrainer
+import random
 from huggingface_hub import snapshot_download
 
 from src.duie_dataset import read_dataset, format_example_wo_schema, format_example_w_schema
+
+random.seed(42)  # 设置随机种子以确保结果可复现
 
 # 下载模型（如果尚未下载）
 model_id = "Qwen/Qwen2.5-1.5B-Instruct"
@@ -44,6 +47,7 @@ model.print_trainable_parameters()
 
 # 准备关系抽取数据集
 train_data = read_dataset("data/train.json")
+train_data = random.sample(train_data, 10000)  # 仅使用 10000 条数据进行快速测试，实际训练时请使用全部数据
 
 # 将数据转换为单轮对话的 Prompt 格式
 def format_prompts(example):
@@ -59,7 +63,8 @@ training_args = TrainingArguments(
     gradient_accumulation_steps=4,
     learning_rate=2e-4,
     logging_steps=1,             # 密集记录日志以获取平滑的 Loss 曲线
-    max_steps=50,                # 实际训练时建议使用 num_train_epochs=3
+    max_steps=100,              # 仅训练 100 步以快速测试，实际训练时请使用更大的值
+    num_train_epochs=3,
     save_strategy="steps",
     save_steps=10,
     optim="paged_adamw_32bit",

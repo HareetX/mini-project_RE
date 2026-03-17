@@ -5,6 +5,11 @@ conda activate mini-project_RE
 pip install -r requirements.txt
 ```
 
+Optional:
+```bash
+unset SSL_CERT_FILE
+```
+
 # Run the main script
 ```bash
 python train_oft.py
