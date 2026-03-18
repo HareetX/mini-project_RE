@@ -47,9 +47,9 @@ class SchemaDatabase:
         return results
 
 
-def format_example_wo_schema(example):
+def format_example_wo_schema(example, is_query: bool = False):
     system_prompt = (
-        "你是一个关系抽取助手，帮助用户从文本中提取实体关系三元组。\n请按照以下格式返回结果：{{\"extracted_triplets\": [{{\"subject\": \"实体1\", \"predicate\": \"关系\", \"object\": \"实体2\"}}]}}" +
+        "你是一个关系抽取助手，帮助用户从文本中提取实体关系三元组。\n请按照以下格式返回结果：{\"extracted_triplets\": [{\"subject\": \"实体1\", \"predicate\": \"关系\", \"object\": \"实体2\"}]}" +
         "\n请从以下文本中提取实体关系三元组：")
     answer = {
         "extracted_triplets": [
@@ -66,12 +66,18 @@ def format_example_wo_schema(example):
     }, {
         "role": "assistant",
         "content": str(answer)
+    }] if not is_query else [{
+        "role": "system",
+        "content": system_prompt
+    }, {
+        "role": "user",
+        "content": example["text"]
     }]
 
 
-def format_example_w_schema(example, schema_candidates):
+def format_example_w_schema(example, schema_candidates, is_query: bool = False):
     system_prompt = (
-        "你是一个关系抽取助手，帮助用户从文本中提取实体关系三元组。\n请按照以下格式返回结果：{{\"extracted_triplets\": [{{\"subject\": \"实体1\", \"predicate\": \"关系\", \"object\": \"实体2\"}}]}}" +
+        "你是一个关系抽取助手，帮助用户从文本中提取实体关系三元组。\n请按照以下格式返回结果：{\"extracted_triplets\": [{\"subject\": \"实体1\", \"predicate\": \"关系\", \"object\": \"实体2\"}]}" +
         "\n以下是一些候选关系类型供参考：\n" + "\n".join([f"- {str(schema)}" for schema in schema_candidates]) +
         "\n请从以下文本中提取实体关系三元组："
     )
@@ -90,6 +96,12 @@ def format_example_w_schema(example, schema_candidates):
     }, {
         "role": "assistant",
         "content": str(answer)
+    }] if not is_query else [{
+        "role": "system",
+        "content": system_prompt
+    }, {
+        "role": "user",
+        "content": example["text"]
     }]
 
 

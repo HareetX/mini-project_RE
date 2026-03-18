@@ -50,6 +50,6 @@ def parse_json(json_str, data_type="dict"):
 
 if __name__ == "__main__":
     # Example usage
-    json_str = "[{'subject': '冯锐', 'predicate': '情感状态', 'object': '没有'}]"
-    parsed_data = parse_json(json_str, data_type="list")
+    json_str = "{{\"extracted_triplets\": [{\"subject\": \"蔡诗萍\", \"predicate\": \"妻子\", \"object\": \"林书炜\"}, {\"subject\": \"林书炜\", \"predicate\": \"妈妈\", \"object\": \"新潮麻辣\"}, {\"subject\": \"林书炜\", \"predicate\": \"老师\", \"object\": \"新潮麻辣\"}, {\"subject\": \"林书炜\", \"predicate\": \"年龄\", \"object\": \"蔡诗萍\"}]}}"
+    parsed_data = parse_json(json_str, data_type="dict")
     print(parsed_data)

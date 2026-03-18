@@ -2,6 +2,7 @@ import json
 import os
 from typing import List, Dict
 import random
+from tqdm import tqdm
 
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
@@ -11,33 +12,7 @@ from src.duie_dataset import read_dataset, format_example_wo_schema
 from utils import parse_json
 
 
-def build_input_ids(tokenizer, messages):
-	"""Convert chat messages to model input IDs."""
-	encoded = tokenizer.apply_chat_template(
-		messages,
-		add_generation_prompt=True,
-		return_tensors="pt",
-	)
-
-	return encoded
-
-
-@torch.inference_mode()
-def generate_triplets(model, tokenizer, messages: List[Dict], device: torch.device, max_new_tokens=128) -> str:
-    inputs = build_input_ids(tokenizer, messages).to(device)
-    output_ids = model.generate(
-		inputs.input_ids,
-		max_new_tokens=max_new_tokens,
-		do_sample=False,
-		pad_token_id=tokenizer.eos_token_id,
-        attention_mask=inputs.attention_mask,
-	)
-	# Strip the prompt part
-    gen_ids = output_ids[0, inputs.input_ids.shape[1]:]
-    return tokenizer.decode(gen_ids, skip_special_tokens=True).strip()
-
-
-def test_oft():
+def test_oft(batch_size: int = 8) -> List[Dict]:
 	random.seed(42)  # 设置随机种子以确保结果可复现
 	device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -49,42 +24,75 @@ def test_oft():
 
 	# Check if eval results already exist
 	if os.path.exists(save_path):
-		print(f"Evaluation results already exist at {save_path}. Loading...")
+		tqdm.write(f"Evaluation results already exist at {save_path}. Loading...")
 		with open(save_path, "r", encoding="utf-8") as f:
 			results = [json.loads(line) for line in f]
-		print(f"Loaded {len(results)} evaluation results.")
+		tqdm.write(f"Loaded {len(results)} evaluation results.")
 		return results
 
 	# Load tokenizer once
 	tokenizer = AutoTokenizer.from_pretrained(base_model_dir, trust_remote_code=True)
 	tokenizer.pad_token = tokenizer.eos_token
+	tokenizer.padding_side = "left"  # 确保左侧填充以适应因果语言模型
 
-	# Base model
-	base_model = AutoModelForCausalLM.from_pretrained(
+	# Load model and adapter
+	model = AutoModelForCausalLM.from_pretrained(
 		base_model_dir,
 		device_map="auto",
 		torch_dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float32,
 		trust_remote_code=True,
 	)
 
-	# Finetuned model (base + adapter)
-	ft_model = AutoModelForCausalLM.from_pretrained(
-		base_model_dir,
-		device_map="auto",
-		torch_dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float32,
-		trust_remote_code=True,
-	)
-	ft_model = PeftModel.from_pretrained(ft_model, finetuned_dir)
+	model = PeftModel.from_pretrained(model, finetuned_dir)
+	model.eval()
 
 	# Load eval data
 	dev_data = read_dataset(dev_path)
-	dev_data = random.sample(dev_data, 200)  # 仅使用 200 条数据进行快速测试，实际评估时请使用全部数据
+	dev_data = random.sample(dev_data, 10)  # 仅使用 200 条数据进行快速测试，实际评估时请使用全部数据
 
+	# Get all messages
+	all_messages = [format_example_wo_schema(example, is_query=True) for example in dev_data]
+
+	def batch_generate(messages_batch):
+		# Generate predictions for a batch of messages
+		texts = [tokenizer.apply_chat_template(msg, tokenize=False, add_generation_prompt=True) for msg in messages_batch]
+		inputs = tokenizer(texts, return_tensors="pt", padding=True).to(device)
+
+		with torch.no_grad():
+			outputs = model.generate(
+				**inputs,
+				max_new_tokens=512,
+				pad_token_id=tokenizer.pad_token_id,
+				do_sample=False,
+			)
+
+		input_length = inputs.input_ids.shape[1]
+		generated_tokens = outputs[:, input_length:]
+		responses = tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
+
+		return responses
+
+	base_preds = []
+	ft_preds = []
+
+	# Base model predictions (without adapter)
+	tqdm.write("Generating predictions with base model...")
+	with model.disable_adapter():
+		for i in tqdm(range(0, len(all_messages), batch_size), desc="Base Model"):
+			batch = all_messages[i:i+batch_size]
+			raw_preds = batch_generate(batch)
+			base_preds.extend(raw_preds)
+
+	# Finetuned model predictions (with adapter)
+	tqdm.write("Generating predictions with finetuned model...")
+	for i in tqdm(range(0, len(all_messages), batch_size), desc="Finetuned Model"):
+		batch = all_messages[i:i+batch_size]
+		raw_preds = batch_generate(batch)
+		ft_preds.extend(raw_preds)
+
+	# Parse and save results
 	results = []
-	for idx, example in enumerate(dev_data, 1):
-		messages = format_example_wo_schema(example)
-		base_pred = generate_triplets(base_model, tokenizer, messages, device)
-		ft_pred = generate_triplets(ft_model, tokenizer, messages, device)
+	for idx, (example, base_pred, ft_pred) in enumerate(zip(dev_data, base_preds, ft_preds), 1):
 		results.append({
 			"id": idx,
 			"text": example.get("text", ""),
@@ -93,15 +101,12 @@ def test_oft():
 			"finetuned_pred": ft_pred,
 		})
 
-		if idx % 20 == 0:
-			print(f"Processed {idx}/{len(dev_data)} examples")
-
 	# Save JSONL
 	with open(save_path, "w", encoding="utf-8") as f:
 		for row in results:
 			f.write(json.dumps(row, ensure_ascii=False) + "\n")
 
-	print(f"Done. Saved results to {save_path}")
+	tqdm.write(f"Done. Saved results to {save_path}")
 
 	return results
 
