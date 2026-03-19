@@ -9,15 +9,18 @@ from huggingface_hub import snapshot_download
 
 from src.duie_dataset import read_dataset, format_example_wo_schema, format_example_w_schema
 
-random.seed(42)  # 设置随机种子以确保结果可复现
+import src.configs as configs
 
-# 下载模型（如果尚未下载）
-model_id = "Qwen/Qwen2.5-1.5B-Instruct"
-local_dir = os.path.join("models", os.path.basename(model_id).lower())
+
+random.seed(42)  # Set random seed for reproducibility
+
+# Download model
+model_id = configs.MODEL_ID
+local_dir = configs.LOCAL_DIR
 snapshot_download(model_id, local_dir=local_dir)
 model_id = local_dir
 
-# 加载模型与分词器
+# Load tokenizer and model
 tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
 tokenizer.pad_token = tokenizer.eos_token
 
@@ -28,62 +31,60 @@ model = AutoModelForCausalLM.from_pretrained(
     trust_remote_code=True
 )
 
-# 配置 OFT (Orthogonal Finetuning) 参数
+# Configure BOFT
 boft_config = BOFTConfig(
-    boft_block_size=4,               # 块大小，通常设置为 4 或 8
-    boft_n_butterfly_factor=2,       # 蝴蝶因子层数，数值越大参数量越多，表达能力越强
-    target_modules=[                 # 推荐覆盖 Qwen2.5 的所有线性层以获得最佳效果
-        "q_proj", "k_proj", "v_proj", "o_proj",
-        "gate_proj", "up_proj", "down_proj"
-    ],
-    boft_dropout=0.1,                # 防止过拟合的 Dropout
+    boft_block_size=configs.BOFT_BLOCK_SIZE,
+    boft_n_butterfly_factor=configs.BOFT_N_BUTTERFLY_FACTOR,
+    target_modules=configs.BOFT_TARGET_MODULES,
+    boft_dropout=configs.BOFT_DROPOUT,
     bias="none",
     task_type="CAUSAL_LM"
 )
 
-# 将模型转换为 PEFT 模型
+# Set up PEFT model with BOFT configuration
 model = get_peft_model(model, boft_config)
 model.print_trainable_parameters()
 
-# 准备关系抽取数据集
-train_data = read_dataset("data/train.json")
-train_data = random.sample(train_data, 10000)  # 仅使用 10000 条数据进行快速测试，实际训练时请使用全部数据
+# Prepare training data
+train_data = read_dataset(configs.TRAIN_PATH)
+train_data = random.sample(train_data, 10000)  # Sample 10,000 examples for training
 
-# 将数据转换为单轮对话的 Prompt 格式
+# Format examples into the required prompt structure
 def format_prompts(example):
     return {"messages": format_example_wo_schema(example)}
 
 dataset = Dataset.from_list(train_data)
 dataset = dataset.map(format_prompts)
 
-# 配置训练参数
+# Configure training arguments
 training_args = TrainingArguments(
-    output_dir="./qwen-oft-relation-extraction",
-    per_device_train_batch_size=2,
-    gradient_accumulation_steps=4,
-    learning_rate=2e-4,
-    logging_steps=1,             # 密集记录日志以获取平滑的 Loss 曲线
-    max_steps=100,              # 仅训练 100 步以快速测试，实际训练时请使用更大的值
-    num_train_epochs=3,
+    output_dir=configs.LOG_CHECKPOINTS_DIR,
+    per_device_train_batch_size=configs.BATCH_SIZE,
+    gradient_accumulation_steps=configs.GRADIENT_ACCUMULATION_STEPS,
+    learning_rate=configs.LEARNING_RATE,
+    logging_steps=1,
+    # max_steps=100,              # Set 100 steps for quick testing
+    num_train_epochs=configs.NUM_TRAIN_EPOCHS,
     save_strategy="steps",
     save_steps=10,
     optim="paged_adamw_32bit",
     fp16=False,
     bf16=True,
-    report_to="tensorboard"      # 启用 TensorBoard 以便导出 Loss 曲线图片
+    report_to="tensorboard"
 )
 
-# 初始化 SFTTrainer 进行微调
+# Initialize the SFT trainer
 trainer = SFTTrainer(
     model=model,
     train_dataset=dataset,
     args=training_args,
 )
 
-# 开始训练
-print("开始训练...")
+# Start training
+print("Start training...")
 trainer.train()
 
-# 保存微调后的权重
-trainer.model.save_pretrained("./qwen-oft-final")
-print("模型保存完毕！")
+# Save the fine-tuned model
+save_dir = configs.FINETUNED_MODEL_DIR
+trainer.model.save_pretrained(save_dir)
+print(f"Saved fine-tuned model to {save_dir}")

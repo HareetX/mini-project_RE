@@ -1,14 +1,40 @@
+import os
+
 # ===================================== #
-# Configuration Settings for LLM Client #
+# Basic Configurations                  #
+# ===================================== #
+MODEL_ID = "Qwen/Qwen2.5-1.5B-Instruct"
+LOCAL_DIR = os.path.join("models", os.path.basename(MODEL_ID).lower())
+
+TRAIN_PATH = "data/train.json"
+VALID_PATH = "data/valid.json"
+
+LOG_CHECKPOINTS_DIR = "./qwen-oft-relation-extraction"
+FINETUNED_MODEL_DIR = "./qwen-oft-final"
+
+EVALUATION_RESULTS_PATH = "eval_oft_results.jsonl"
+
+# ===================================== #
+# Configuration Settings for Training   #
 # ===================================== #
 
-# Embeddings configuration settings
-EMBEDDINGS_MODEL_NAME = "text-embedding-3-large"
+# BOFT Configuration
+BOFT_BLOCK_SIZE = 4
+BOFT_N_BUTTERFLY_FACTOR = 2
+BOFT_TARGET_MODULES = [
+    "q_proj", "k_proj", "v_proj", "o_proj",
+    "gate_proj", "up_proj", "down_proj"
+]
+BOFT_DROPOUT = 0.1
 
-# Model configuration settings
-MODEL_NAME = "gpt-4o-mini"
+# Training Hyperparameters
+BATCH_SIZE = 2
+GRADIENT_ACCUMULATION_STEPS = 4
+LEARNING_RATE = 2e-4
+NUM_TRAIN_EPOCHS = 1
 
-BASE_URL = "https://az.gptplus5.com/v1"
-API_KEY = "sk-FhRRKc9on4o7fQ4MEa8908B8Ab594746B63a622cC3Eb8c68"
-
-MAX_RETRIES = 3
+# ===================================== #
+# Configuration Settings for Evaluation #
+# ===================================== #
+EXACT_MATCH_TYPES = {"subject", "predicate", "object"}
+GREEDY_MATCH_THRESHOLD = 0.66

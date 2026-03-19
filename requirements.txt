@@ -13,3 +13,5 @@ openai
 ninja
 tensorboard
 bitsandbytes
+sentence_transformers
+matplotlib
